@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import socket from "./sockets";
 import "./App.css"; // Importing CSS for styling
+import axios from "axios";
 
 interface MessageProps {
   message: string;
@@ -36,28 +36,6 @@ const App: React.FC = () => {
   >([]);
 
   const chatBoxRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    // Connect to the Socket.IO server
-    socket.on("connect", () => {
-      console.log("Connected to the server");
-
-      // Join the default room (useful for testing)
-      // socket.emit("join", { session_id: "test-room" });
-    });
-
-    // Listen for messages from the server
-    socket.on("message", (data: { message: string }) => {
-      setChatLog((prevChatLog) => [
-        ...prevChatLog,
-        { message: data.message, isSentByCurrentUser: false },
-      ]);
-    });
-
-    return () => {
-      socket.off("connect");
-      socket.off("message");
-    };
-  }, []);
 
   useEffect(() => {
     if (chatBoxRef.current) {
@@ -65,14 +43,60 @@ const App: React.FC = () => {
     }
   }, [chatLog]);
 
-  const sendMessage = () => {
+  const getBotResponse = async (userMessage: string) => {
+  try {
+    const response = await axios.post(
+      "http://localhost:3001/api/v1/hippo/chat-bot",
+      {
+        business_id: 1,
+        channel_id: "7475",
+        message: userMessage,
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization:
+            "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5hdnByZWV0LnNpbmdoQGp1bmdsZXdvcmtzLmNvbSIsImV4cCI6MTgxOTM4MDg3N30.LdKWD-aTb9zh5uoxPdHyGeCc_4ONr7wph7aAMFJEftI",
+        },
+      }
+    );
+
+    if (response.data.success) {
+      return response.data.data.bot_output; // Adjusted to the correct path
+    } else {
+      console.error("API error:", response.data.message);
+      return "Sorry, I couldn't process that.";
+    } // Adjust based on the API response structure
+  } catch (error) {
+    console.error("Error fetching chatbot response:", error);
+
+    if (axios.isAxiosError(error) && error.response) {
+      // Handle specific API errors if necessary
+      console.error("API Error:", error.response.data);
+      return error.response.data.message || "Sorry, I couldn't process that.";
+    }
+
+    return "An error occurred while fetching the response.";
+  }
+};
+
+  const sendMessage = async () => {
     if (message) {
-      // Emit a message to the server
-      socket.emit("message", { session_id: "test-room", message });
+      // Add user's message to the chat log
       setChatLog((prevChatLog) => [
         ...prevChatLog,
         { message, isSentByCurrentUser: true },
       ]);
+
+      // Fetch chatbot response
+      const botResponse = await getBotResponse(message);
+
+      // Add chatbot's response to the chat log
+      setChatLog((prevChatLog) => [
+        ...prevChatLog,
+        { message: botResponse, isSentByCurrentUser: false },
+      ]);
+
       setMessage("");
     }
   };
@@ -85,7 +109,7 @@ const App: React.FC = () => {
 
   return (
     <div className="App">
-      <h1>JW AI ChatBot</h1>
+      <h1>AI ChatBot</h1>
 
       <div className="chat-box" ref={chatBoxRef}>
         {chatLog.map((msg, index) => (
